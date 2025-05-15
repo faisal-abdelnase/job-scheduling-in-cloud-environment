@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Task Scheduling</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-start p-6">
+
+    <!-- Modal for Input -->
+    <div id="inputModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="bg-white p-6 rounded-lg w-96 shadow-xl space-y-4">
+            <h2 class="text-xl font-semibold text-center">Enter Parameters</h2>
+            <input id="numTasks" type="number" placeholder="Number of Tasks" class="w-full p-2 border rounded" />
+            <input id="numNodes" type="number" placeholder="Number of Nodes" class="w-full p-2 border rounded" />
+            <input id="numAnts" type="number" placeholder="Number of Ants" class="w-full p-2 border rounded" />
+            <input id="numIterations" type="number" placeholder="Number of Iterations" class="w-full p-2 border rounded" />
+            <div class="flex justify-end space-x-2">
+                <button onclick="closeModal()" class="bg-gray-300 px-4 py-2 rounded">Cancel</button>
+                <button onclick="runSelectedAlgorithm()" class="bg-blue-600 text-white px-4 py-2 rounded">Run</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="flex flex-col items-center space-y-4">
+            <svg class="animate-spin h-12 w-12 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+            </svg>
+            <p class="text-white text-lg font-semibold">Running algorithm...</p>
+        </div>
+    </div>
+
+    <!-- Main Two-Column Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full max-w-7xl">
+
+        <!-- LEFT SIDE -->
+        <div class="flex flex-col space-y-6">
+
+            <!-- Algorithm Buttons -->
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                <button onclick="openModal('AS')" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl shadow-lg">Run AS</button>
+                <button onclick="openModal('MMAS')" class="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg">Run MMAS</button>
+                <button onclick="openModal('ASrank')" class="bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-xl shadow-lg">Run ASrank</button>
+                <button onclick="openModal('EAS')" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-xl shadow-lg">Run EAS</button>
+                <button onclick="openModal('ACO')" class="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 rounded-xl shadow-lg">Run ACO</button>
+                <button onclick="openModal('ACO_GA')" class="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-xl shadow-lg">Run ACO-GA</button>
+                <button onclick="openModal('ALL')" class="col-span-2 bg-black hover:bg-gray-800 text-white px-6 py-3 rounded-xl shadow-lg">Run All Algorithms</button>
+            </div>
+
+            <!-- Best Makespan -->
+            <div class="bg-white rounded-xl shadow-lg p-6 flex flex-col items-center justify-center">
+                <h3 class="text-lg font-bold mb-2">Best Makespan</h3>
+                <div id="bestMakespan" class="text-4xl text-blue-700 font-bold">--</div>
+            </div>
+
+            <!-- Logs -->
+            <div class="bg-white rounded-xl shadow-lg p-6 h-96 overflow-y-auto">
+                <h3 class="text-lg font-bold mb-2">Iteration Logs</h3>
+                <ul id="logOutput" class="text-sm text-gray-700 space-y-1"></ul>
+            </div>
+
+            <!-- Node Utilization -->
+            <div class="bg-white rounded-xl shadow-lg p-6 w-full">
+                <h3 class="text-lg font-bold mb-2">Best Solution - Node Utilization</h3>
+                <ul id="nodeUtilization" class="text-sm text-gray-700 space-y-4"></ul>
+            </div>
+        </div>
+
+        <!-- RIGHT SIDE: Charts -->
+        <div id="chartsContainer" class="flex flex-col space-y-8 bg-white rounded-xl shadow-lg p-6 w-full">
+            <h3 class="text-2xl font-bold">Algorithm Charts</h3>
+        </div>
+    </div>
+
+    <script>
+        let selectedAlgorithm = '';
+
+        function openModal(algorithm) {
+            selectedAlgorithm = algorithm;
+            document.getElementById('inputModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('inputModal').classList.add('hidden');
+        }
+
+        async function runSelectedAlgorithm() {
+            const tasks = parseInt(document.getElementById('numTasks').value);
+            const nodes = parseInt(document.getElementById('numNodes').value);
+            const ants = parseInt(document.getElementById('numAnts').value);
+            const iterations = parseInt(document.getElementById('numIterations').value);
+
+            if (!tasks || !nodes || !ants || !iterations) {
+                alert("Please fill in all fields.");
+                return;
+            }
+
+            closeModal();
+            document.getElementById('loadingSpinner').classList.remove('hidden');
+
+            try {
+                if (selectedAlgorithm === 'ALL') {
+                    await runAllAlgorithms(tasks, nodes, ants, iterations);
+                } else {
+                    await runSingleAlgorithm(selectedAlgorithm, tasks, nodes, ants, iterations);
+                }
+            } catch (error) {
+                alert("Error running the algorithm(s).");
+            } finally {
+                document.getElementById('loadingSpinner').classList.add('hidden');
+            }
+        }
+
+        async function runSingleAlgorithm(algorithm, tasks, nodes, ants, iterations) {
+            const response = await fetch(`/run/${algorithm}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tasks, nodes, ants, iterations })
+            });
+
+            const data = await response.json();
+
+            document.getElementById('bestMakespan').textContent = data.best_makespan;
+            const logContainer = document.getElementById('logOutput');
+            logContainer.innerHTML = '';
+            data.logs.forEach((log, i) => {
+                const item = document.createElement('li');
+                item.textContent = `Iteration ${i + 1}: ${log}`;
+                logContainer.appendChild(item);
+            });
+
+            const nodeUtil = document.getElementById('nodeUtilization');
+            nodeUtil.innerHTML = '';
+            data.node_utilization.forEach(node => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <div class="border rounded-lg p-3 bg-gray-50">
+                        <p class="font-semibold">Node ${node.id} (CPU: ${node.cpu_capacity}, Mem: ${node.memory_capacity}GB)</p>
+                        <p>Tasks assigned: ${node.task_count}</p>
+                        <p>Utilization: ${node.utilization.toFixed(1)}%</p>
+                        <p>Total duration: ${node.total_duration}</p>
+                    </div>
+                `;
+                nodeUtil.appendChild(li);
+            });
+
+            const container = document.getElementById('chartsContainer');
+            container.innerHTML = '<h3 class="text-2xl font-bold">Algorithm Charts</h3>';
+            await renderCharts(algorithm, data);
+        }
+
+        async function runAllAlgorithms(tasks, nodes, ants, iterations) {
+            const algorithms = ['AS', 'MMAS', 'ASrank', 'EAS', 'ACO', 'ACO_GA'];
+            const container = document.getElementById('chartsContainer');
+            container.innerHTML = '<h3 class="text-2xl font-bold">Algorithm Charts</h3>';
+
+            for (const algo of algorithms) {
+                const response = await fetch(`/run/${algo}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tasks, nodes, ants, iterations })
+                });
+                const data = await response.json();
+                await renderCharts(algo, data);
+            }
+        }
+
+        async function renderCharts(algo, data) {
+            const container = document.getElementById('chartsContainer');
+            const section = document.createElement('div');
+            section.classList.add('border', 'rounded', 'p-4', 'bg-gray-50');
+            section.innerHTML = `
+                <h4 class="text-xl font-bold mb-2">${algo} Results</h4>
+                <canvas id="makespanChart_${algo}" class="w-full h-64 mb-6"></canvas>
+                <canvas id="convergenceChart_${algo}" class="w-full h-64"></canvas>
+            `;
+            container.appendChild(section);
+
+            const labels = data.fitness_logs.map((_, i) => `Iter ${i + 1}`);
+            new Chart(document.getElementById(`makespanChart_${algo}`), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `${algo} Makespan`,
+                        data: data.fitness_logs,
+                        borderColor: 'rgb(37, 99, 235)',
+                        backgroundColor: 'rgba(37, 99, 235, 0.2)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { title: { display: true, text: 'Makespan' } },
+                        x: { title: { display: true, text: 'Iterations' } }
+                    }
+                }
+            });
+
+            const convLabels = data.convergence_history.map((_, i) => `Iter ${i + 1}`);
+            new Chart(document.getElementById(`convergenceChart_${algo}`), {
+                type: 'line',
+                data: {
+                    labels: convLabels,
+                    datasets: [{
+                        label: `${algo} Convergence`,
+                        data: data.convergence_history,
+                        borderColor: 'rgb(139, 92, 246)',
+                        backgroundColor: 'rgba(139, 92, 246, 0.2)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { title: { display: true, text: 'Convergence' } },
+                        x: { title: { display: true, text: 'Iterations' } }
+                    }
+                }
+            });
+        }
+    </script>
+
+</body>
+</html>
